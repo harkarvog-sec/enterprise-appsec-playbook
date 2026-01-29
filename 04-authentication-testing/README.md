@@ -1,59 +1,25 @@
 # Authentication Testing
 
-## Purpose:
-- Validate login mechanisms, password policies, and authentication controls.
+Authentication is a critical trust boundary in enterprise applications. Failures in authentication controls frequently result in account takeover, privilege escalation, and unauthorized access to sensitive data.
 
----
+This module documents a manual, attacker-driven approach to authentication testing across web, API, and distributed system architectures. The focus is on identifying logic flaws, inconsistent enforcement, and state handling weaknesses that are commonly missed by automated tools.
 
-## Tools & Techniques:
-- curl  
-- HTTP clients  
-- Browser DevTools  
+The goal of this phase is not to confirm that authentication works under normal conditions, but to determine whether it can be bypassed, abused, or subverted under adversarial conditions.
 
----
+## Scope:
 
-## Methodology:
-- Test login workflows  
-- Validate password policy  
-- Review recovery mechanisms  
-- Assess brute-force protection  
-- Check MFA enforcement  
+Authentication testing in this playbook includes:
 
------------
+- Login and credential validation mechanisms
+- Password reset and account recovery flows
+- Multi-factor authentication enforcement
+- Session and token issuance during authentication
+- OAuth and third-party identity integrations
 
-## Commands:
-### Step 1:
-- Login Validation:
+## Outcome:
 
-curl -X POST https://target.com/login \
--d "username=test&password=test"
+Successful testing produces validated findings that demonstrate:
 
-----
-
-### Step 2:
-- Password Reset:
-- 
-curl -I https://target.com/reset-password
-
-----
-
-### Step 3:
-- Brute Force Testing:
-- 
-for i in {1..10}; do
-  curl https://target.com/login
-done
-
----------
-
-### Output:
-- Authentication weaknesses
-- Weak password policies
-- MFA gaps
-
-------
-
-#### Security Impact:
-- Prevents account takeover
-- Reduces credential abuse
-- Improves identity security
+- Whether authentication boundaries are consistently enforced
+- Whether identity state is securely established and maintained
+- Whether attackers can persist access despite user remediation actions

@@ -1,49 +1,27 @@
 # Business Logic Testing
 
-## Purpose:
-- Detect flaws in workflows and process logic.
+Business logic vulnerabilities occur when application workflows can be abused in ways not anticipated by developers. These issues often bypass traditional security controls and cannot be detected by automated scanners.
 
------
+This module documents a manual, attacker-driven approach to identifying business logic flaws in enterprise applications, focusing on abuse of workflows, state transitions, trust assumptions, and edge cases.
 
-## Tools & Techniques:
-- curl
-- Manual workflow testing
-- Transaction replay
+---
 
-------
+## Scope
 
-## Methodology:
-- Map workflows
-- Modify sequences
-- Replay transactions
-- Test limits
-- Bypass controls
+Business logic testing in this playbook includes:
 
-----
+- Workflow and state manipulation
+- Order, payment, and transaction abuse
+- Rate limit and quota bypass
+- Authorization logic embedded in workflows
+- Trust boundary and assumption violations
 
-## Commands:
-# Step 1:
-- Replay Transaction:
+---
 
-curl -X POST https://target.com/pay -d "amount=100"
+## Outcome
 
--------
+Successful testing demonstrates:
 
-### Step 2:
-- Bypass Step:
-
-curl https://target.com/confirm?skip=true
-
-------
-
-#### Output:
-- Payment bypass
-- Logic flaws
-- Workflow abuse
-
-------
-
-### Security Impact:
-- Prevents fraud
-- Protects revenue
-- Improves integrity
+- Whether workflows can be abused outside intended paths
+- Whether critical actions depend on insecure assumptions
+- Whether attackers can gain financial, operational, or privilege advantages

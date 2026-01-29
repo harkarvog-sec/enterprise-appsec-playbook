@@ -1,47 +1,25 @@
-# Access Control
+# Access Control Testing
 
-## Purpose:
-- Validate role-based access control, authorization checks, and privilege management.
+Access control is a critical security boundary that protects sensitive resources from unauthorized access. Weak or misconfigured access controls are a leading cause of horizontal and vertical privilege escalation, sensitive data exposure, and business logic abuse.
 
---------
-
-## Tools & Techniques:
-- curl  
-- HTTP requests analysis  
-- Role and permissions enumeration  
-
--------
-
-## Methodology:
-- Attempt access to restricted endpoints  
-- Check IDOR (Insecure Direct Object References)  
-- Validate API access permissions  
+This module documents a manual, attacker-driven approach to testing access controls across web, API, and distributed systems.
 
 ---
 
-## Commands:
-### Step 1:
-- Admin Access Test:
+## Scope
 
-curl https://target.com/admin
+Horizontal access control (users accessing other users’ data)  
+Vertical access control (users accessing admin functions)  
+Role-based and attribute-based access control enforcement  
+Object-level, field-level, and API endpoint-level access restrictions  
+Multi-tenant access isolation
 
--------
+---
 
-### Step 2:
-- API Object Access:
+## Outcome
 
-curl https://target.com/api/admin/users
+Successful testing demonstrates:
 
-------
-
-### Output:
-- Unauthorized access attempts
-- Privilege escalation possibilities
-- Access control gaps
-
-------
-
-### Security Impact:
-- Prevents unauthorized access
-- Reduces risk of data leakage
-- Supports least privilege enforcement
+Whether access control boundaries are consistently enforced  
+Whether privilege escalation is possible  
+Whether sensitive resources are protected against unauthorized access

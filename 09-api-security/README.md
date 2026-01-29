@@ -1,56 +1,26 @@
-# API Security
+# API Security Testing
 
-## Purpose:
-- Secure REST and GraphQL APIs against unauthorized access and abuse.
+APIs are a primary attack surface in modern enterprise applications. Weaknesses in authentication, authorization, business logic, and data exposure often lead to critical breaches.
 
------
+This module documents a manual, attacker-driven approach to API security testing. Focus is on identifying broken access controls, injection points, excessive data exposure, and misconfigured endpoints across REST and GraphQL APIs.
 
-## Tools & Techniques:
-- curl
-- JSON testing
-- Header inspection
+The goal is to validate whether API functionality can be abused by a motivated attacker under realistic conditions.
 
------
+## Scope
 
-## Methodology:
-- Identify API endpoints
-- Validate authentication
-- Test authorization
-- Check rate limiting
-- Validate schema
+- API authentication and authorization enforcement
+- Rate limiting and abuse protection
+- Data exposure and sensitive information leaks
+- Business logic validation
+- Input validation and injection testing
+- OAuth, JWT, and token security
+- Error handling and response leakage
 
-----
+## Outcome
 
-##  Commands:
-# Step 1:
-- API Enumeration:
+Successful testing produces validated findings that demonstrate:
 
-curl https://target.com/api/v1/users
-
---------
-
-### Step 2:
-- Auth Bypass:
-
-curl https://target.com/api/admin -H "Authorization: Bearer fake"
-
------
-
-## Step 3:
-- Rate Test:
-
-for i in {1..50}; do curl https://target.com/api/login; done
-
---------
-
-#### Output:
-- Broken auth
-- IDOR
-- Excessive data exposure
-
--------
-
-#### Security Impact:
-- Protects backend services
-- Prevents data leakage
-- Improves API governance
+- Whether API endpoints enforce proper authentication and authorization
+- Whether sensitive data is protected from unauthorized access
+- Whether business logic can be manipulated to gain an unfair advantage
+- Whether attack paths exist that could lead to data leakage, account compromise, or service abuse

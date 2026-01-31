@@ -1,51 +1,39 @@
-# Reporting & Automation
+# Reporting & Security Automation
 
-# Purpose:
-- Automate security reporting and workflow management.
+In enterprise application security, discovering vulnerabilities is only half the job. The real value of security testing is realized when findings are clearly communicated, prioritized, and acted upon by engineering, leadership, and compliance stakeholders.
 
--------
+This module documents how security findings are transformed from raw testing output into structured, reproducible, and automation-friendly reports that scale across large organizations.
 
-#### Tools & Techniques:
-- Python
-- APIs
-- Jira
-- ServiceNow
+---
 
-------
+## Scope
 
-##### Methodology:
-- Collect data
-- Normalize
-- Automate reports
-- Integrate tools
+This module focuses on:
 
-------
+- Standardizing vulnerability reporting
+- Capturing reproducible evidence and Proof of Impact (POI)
+- Severity and risk scoring
+- Translating technical issues into business risk
+- Automating report generation and tracking
+- Integrating findings into engineering and compliance workflows
 
-# Commands:
-#### Step 1:
-- API Data Fetch:
+---
 
-curl https://api.rapid7.com/vm/assets
+## Objectives
 
--------
+- Reduce friction between security and engineering teams
+- Ensure findings are actionable and defensible
+- Enable scalable security operations through automation
+- Support remediation validation and retesting
+- Provide audit-ready documentation for compliance and governance
 
-### Step 2:
-# Python Report:
+---
 
-import requests
-r = requests.get("https://api.example.com/vulns")
-print(r.json())
+## Audience
 
---------
-
-#### Output:
-- Automated dashboards
-- KPI reports
-- Ticket workflows
-
---------
-
-### Security Impact:
-- Improves visibility
-- Saves time
-- Enhances governance
+- Application Security Engineers
+- Penetration Testers
+- Security Engineers
+- Engineering Teams
+- Security Leadership
+- GRC and Compliance Teams

@@ -23,6 +23,23 @@ Ensure findings from multiple sources are ingested correctly and consistently.
   - Evidence
   - Severity
   - Source
+ 
+Manual commands / checks:
+
+# Example: Insert a dummy finding via API to test ingestion
+
+curl -X POST https://reporting.target.com/api/findings \
+-H "Authorization: Bearer <API_TOKEN>" \
+-H "Content-Type: application/json" \
+-d '{
+  "title": "Test Vulnerability",
+  "asset": "test-app.target.com",
+  "severity": "Medium",
+  "evidence": "curl -I https://test-app.target.com"
+}'
+
+- Verify it appears in the system.
+- Confirm normalized fields populated correctly.
 
 ### Validation Checks
 - No data truncation
@@ -43,6 +60,21 @@ Verify that findings are normalized into a consistent schema and duplicates are 
   - Asset identifiers
   - Vulnerability categories
 
+Manual commands / checks:
+
+# Submit same vulnerability from two sources
+
+curl -X POST https://reporting.target.com/api/findings \
+-d '{...}' # Source A
+curl -X POST https://reporting.target.com/api/findings \
+-d '{...}' # Source B
+
+# Check API output to see if the system deduplicates
+
+curl https://reporting.target.com/api/findings?title="Test Vulnerability"
+
+- Confirm merged entries, source attribution preserved.
+
 ### Validation Checks
 - Duplicate findings are merged or linked
 - Source attribution is preserved
@@ -62,6 +94,20 @@ Ensure evidence and Proof of Impact (POI) remain intact throughout the reporting
   - Screenshots or artifacts
 - Generate reports and tickets
 
+Manual commands / checks:
+
+# Attach evidence using CLI
+
+curl -X POST https://reporting.target.com/api/findings/123/evidence \
+-F "file=@./exploit_output.txt" \
+-H "Authorization: Bearer <API_TOKEN>"
+
+# Validate download / view
+
+curl -O https://reporting.target.com/api/findings/123/evidence/exploit_output.txt
+
+- Ensures PoI stays intact.
+
 ### Validation Checks
 - Evidence is not altered or lost
 - Attachments remain accessible
@@ -80,6 +126,23 @@ Confirm severity calculations reflect real-world risk.
   - Impact
   - Context (internal vs external)
 - Compare automated severity against expected severity
+
+Manual checks:
+
+- Submit findings with intentionally different severity (Critical / Low)
+- Compare automated severity mapping
+
+- CLI example for submission:
+
+curl -X POST https://reporting.example.com/api/findings \
+-d '{
+  "title": "SQLi Test",
+  "asset": "app.target.com",
+  "severity": "Critical",
+  "evidence": "curl -i https://app.target.com/login"
+}'
+
+- Confirm scoring aligns with expected risk.
 
 ### Validation Checks
 - High-impact issues are not under-scored
@@ -102,6 +165,18 @@ Ensure seamless integration with remediation workflows.
   - Severity
   - SLA tags
 
+Manual commands / checks:
+
+# Generate a Jira ticket via reporting automation
+python3 scripts/jira_sync.py --finding 123
+
+# Verify ticket created with correct fields
+
+curl -H "Authorization: Bearer <JIRA_TOKEN>" \
+https://jira.target.com/rest/api/2/issue/TEST-123
+
+- Ensure evidence, severity, and description propagate correctly.
+
 ### Validation Checks
 - Tickets contain actionable reproduction steps
 - No sensitive data leakage in tickets
@@ -121,6 +196,16 @@ Verify accuracy of security metrics and reporting outputs.
   - Severity distribution
   - Time to remediation
 
+Manual commands / checks:
+
+# Generate automated PDF / CSV report
+python3 scripts/vuln_report.py --output report_$(date +%F).pdf
+
+# Validate counts and severity distribution
+python3 scripts/vuln_report.py --summary
+
+- Cross-check with database / ingestion logs for consistency.
+
 ### Validation Checks
 - Metrics match raw data
 - No calculation errors
@@ -138,6 +223,16 @@ Ensure reporting automation does not introduce new security risks.
   - Malicious payloads in finding fields
   - Oversized evidence attachments
 - Review access controls on reports and tickets
+
+Manual commands / checks:
+
+# Inject malicious payload in finding title
+
+curl -X POST https://reporting.target.com/api/findings \
+-d '{"title": "<script>alert(1)</script>", "severity":"Low"}'
+
+- Validate no XSS or injection occurs in report output
+- Check access controls
 
 ### Validation Checks
 - No injection or rendering issues

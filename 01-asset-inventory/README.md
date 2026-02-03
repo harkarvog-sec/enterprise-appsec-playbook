@@ -1,95 +1,67 @@
-### Asset Inventory
+# Asset Inventory Module
 
-## Purpose:
-- Identify and document all assets within the target environment, including domains, subdomains, IP addresses, servers, and services.  
-- This provides a foundation for all subsequent security testing and vulnerability management.
+## Purpose
 
----
-
-## Tools & Techniques:
-- dig, nslookup, host - (DNS enumeration)  
-- curl - (check service availability)  
-- ping - (host live check)  
-- nc/netcat - (port validation)  
-- traceroute - (network path)  
-- Spreadsheet or CSV -  (documentation)  
+This module focuses on building a complete, enterprise-grade asset inventory for applications, services, and infrastructure.  
+The goal is to understand all components, their dependencies, and exposure points to support effective vulnerability management and risk prioritization.
 
 ---
 
-## Methodology:
-- DNS Enumeration – List all domains and subdomains.
-- Host Availability – Check which hosts are live.  
-- Service Identification – Confirm which services/ports are exposed.  
-- Network Path Analysis – Map network routes and infrastructure.  
-- Document Everything – Maintain a CSV or spreadsheet with all findings.  
+## Objectives
+
+- Identify all assets across applications, APIs, services, databases, and cloud components  
+- Map dependencies between components  
+- Understand the criticality and exposure of each asset  
+- Provide a foundation for vulnerability scanning, threat modeling, and incident response
 
 ---
 
-##### Commands:
-# Step 1:
-- DNS Lookup:
+## Scope
 
-dig target.com any
-nslookup target.com
-host target.com
+This module applies to:
 
-# Finds all domain info, mail servers, and name servers.
-
----
-
-## Step 2: 
-- Check Host Availability:
-
-ping target.com
-
-curl -I https://target.com
-
-# Confirms if hosts are live and reachable.
-
-----
-
-### Step 3:
-- Service / Port Validation:
-
-nc -vz target.com 80
-nc -vz target.com 443
-
-# Checks which ports/services are exposed.
+- Web applications, APIs, and backend services  
+- Monolithic, microservices, and cloud-native architectures  
+- CI/CD pipelines and cloud environments  
+- Third-party integrations and dependencies
 
 ---
 
-## Step 4:
-- Network Path:
-- 
-traceroute target.com
+## Key Coverage Areas
 
-# Maps network hops and connectivity paths.
+- Inventory all hosts, services, endpoints, and databases  
+- Map API endpoints and interfaces  
+- Document cloud services, IAM roles, and network exposure  
+- Identify external dependencies (third-party APIs, libraries, packages)  
+- Prioritize assets by business impact and exposure
 
 ---
 
-### Step 5:
-- Document Findings:
-  
-# Export results to CSV:
+## Repository Structure
 
-echo "Host,IP,Port,Status" > assets.csv
-echo "example.com,93.184.216.34,80,open" >> assets.csv
+Each asset inventory module includes:
 
-# Maintains a clear, professional record of all assets.
+- README.md – Scope and goals  
+- testing-methodology.md – Step-by-step inventory collection process  
+- attack-scenarios.md – Misconfiguration or asset discovery risks  
+- checklist.md – Repeatable steps for inventory validation  
+- remediation.md – Recommendations for asset management, monitoring, and hardening
 
-----
+---
 
-# Output:
-- List of domains & subdomains
-- Live hosts verified
-- Open ports/services identified
-- Network infrastructure map
-- CSV or spreadsheet inventory
+## Why This Matters
 
-----
+A complete asset inventory is the foundation for all AppSec activities:
 
-### Security Impact:
-- Establishes a complete asset baseline
-- Reduces blind spots in testing
-- Enables accurate vulnerability assessment
-- Supports security reporting and remediation planning
+- Enables comprehensive vulnerability management  
+- Supports threat modeling and attack surface reduction  
+- Guides prioritization of remediation efforts  
+- Reduces blind spots for internal and external exposures
+
+---
+
+## Notes
+
+- Only collect assets from authorized environments. 
+- Document findings clearly for operational teams and leadership.  
+- Maintain asset inventory regularly to reflect system changes.

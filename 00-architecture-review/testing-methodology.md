@@ -1,241 +1,344 @@
-### Architecture Review – Testing Methodology
+# Architecture Review – Testing Methodology
+
+---
+
+## Enterprise Application Security Architecture Review Methodology
 
 Overview:
+This document defines a repeatable, enterprise-ready methodology for performing application security architecture reviews.  
 
-This document outlines a manual-first, attacker-driven methodology for conducting application architecture reviews in enterprise environments.
+The methodology is:
+- Manual-first and attacker-driven
+- Tool-informed, not tool-dependent 
+- Designed to integrate with enterprise vulnerability management, detection, reporting, and automation workflows 
 
-The goal is to identify design-level security weaknesses that create systemic risk and cannot be reliably detected through automated scanning or endpoint-focused testing.
-
-This methodology reflects how architecture reviews are performed in real-world AppSec programs — balancing depth, practicality, and engineering alignment.
+It reflects real-world attacker behavior and how Senior Application Security Engineers assess systemic risk beyond scanners.
 
 ---
 
 ## Guiding Principles
 
-- Manual-first, not scanner-driven
-- Focus on trust boundaries and assumptions
-- Prioritize realistic attacker abuse paths
-- Validate security controls at design level
-- Optimize for impact, not volume of findings
+- Architecture flaws create systemic risk 
+- Automated tools provide signal, not conclusions 
+- Trust boundaries are the most critical control points  
+- Authorization failures matter more than input validation  
+- Findings must translate into engineering action 
+- Automation should reduce friction, not thinking
 
 ---
 
-### Step 1: System Decomposition
+## Phase 1 – System Decomposition & Asset Discovery
 
 Objective:
-- Understand what exists before evaluating how it can be broken.
+Understand what exists before evaluating how it can be broken.
 
-Activities:
-- Identify all major system components:
-- Frontend applications
-- Backend services
-- APIs
-- Databases
-- Message queues
-- Cloud services
+Manual Techniques:
+- Review architecture diagrams (or reconstruct if missing)  
+- Interview engineers and SREs  
+- Identify major components:
+  - Frontend applications  
+  - Backend services  
+  - APIs  
+  - Databases  
+  - Message queues  
+  - Cloud services  
+  - CI/CD systems  
+- Document ownership, technology stack, and deployment model  
 
-Document:
-- Ownership
-- Technology stack
-- Deployment model
+# Commands & Examples:
+'''bash:
+# Kubernetes discovery
 
-Key Questions:
-- What components are internet-facing?
-- Which services communicate internally?
-- Where does sensitive data reside?
+kubectl get namespaces
+kubectl get pods -A
+kubectl get svc -A
+
+# AWS asset discovery
+aws ec2 describe-instances
+aws rds describe-db-instances
+aws iam list-roles
+
+# Tooling Integration:
+
+Rapid7 InsightVM: 
+enumerate exposed services, internal hosts, validate scanner coverage
+
+CrowdStrike: 
+confirm hosts/containers have runtime protection, identify gaps (build agents, jump hosts)
+
+Output: 
+Asset inventory, architecture draft diagram, visibility gaps
 
 ---
 
-## Step 2: Trust Boundary Identification
+### Phase 2 – Trust Boundary Identification
 
-Objective:
-Identify where trust changes within the system.
+Objective: 
+Identify where trust changes within the system and whether transitions are enforced.
 
-Activities:
-- Map trust boundaries between:
-- User → application
-- Application → internal services
-- Service → service
-- Application → cloud provider
-- Application → third parties
+# Manual Techniques:
 
-Identify implicit trust assumptions:
+Map trust boundaries:
+- User → Application
+- Application → Internal services
+- Service → Service
+- Application → Cloud provider
+- Application → Third parties
+
+Look for implicit trust assumptions:
 - Internal services are trusted
 - Traffic from VPC is safe
 - Authenticated users are authorized
 
-Red Flags:
+Red flags:
 - Authorization based solely on network location
 - Shared credentials across services
-- Missing identity verification between components
+- Missing identity verification
+
+## Manual Testing Example:
+
+Reuse user token across internal services:
+
+curl -H "Authorization: Bearer <token>" \
+https://internal-api.company.local/admin
+
+## Tooling Integration:
+
+Snyk: 
+review auth-related code patterns, detect hardcoded secrets
+
+HackerOne: 
+analyze prior reports for repeated auth flaws and systemic patterns
+
+# Output: 
+Trust boundary map, high-risk trust assumptions
 
 ---
 
-## Step 3: Data Flow Analysis
+### Phase 3 – Data Flow & Sensitivity Analysis
 
-Objective:
-Track sensitive data across the system to identify exposure and misuse risks.
+Objective: 
+Track sensitive data across the system to identify exposure risks.
 
-Activities:
-- Identify sensitive data types:
-- Credentials
-- Tokens
-- PII / PHI
-- Financial data
+## Manual Techniques:
+Trace sensitive data: credentials, tokens, PII/PHI, financial data
 
-Map how data flows:
-
+Map flows:
 - In transit
 - At rest
 - Between services
 
 Validate:
-
-- Encryption usage
-- Access control enforcement
+- Encryption
+- Access controls
 - Data minimization
 
-Key Questions:
+## Commands & Examples
 
-- Where can data be intercepted or leaked?
-- Are least-privilege principles applied?
-- Are logs exposing sensitive data?
+Search logs for sensitive data exposure:
 
----
+grep -R "Authorization:" /var/log/
 
-### Step 4: Control Placement Review
+## Tooling Integration
 
-Objective:
+Rapid7: 
+correlate data stores with exposure risk
 
-- Evaluate whether security controls are correctly placed and enforced.
-- Activities
-- Identify security controls:
-- Authentication
-- Authorization
-- Rate limiting
-- Input validation
-- Monitoring and logging
+Power BI: 
+track regulated data usage and architecture risk trends
 
-Validate control placement:
-
-- At entry points
-- Between services
-- At privilege boundaries
-
-Common Issues:
-
-- Controls enforced only at the frontend
-- Missing authorization between microservices
-- Over-reliance on perimeter defenses
+# Output: Data flow diagrams, sensitive data exposure risks
 
 ---
 
-### Step 5: Threat Modeling (Lightweight & Practical)
+### Phase 4 – Authentication & Authorization Review
 
-Objective:
+Objective: 
+Validate who can do what — and where it breaks.
+
+## Manual Techniques:
+
+- Validate RBAC enforcement
+- Validate service-to-service authorization
+- Validate tenant isolation
+- Attempt privilege escalation with valid tokens
+
+## Manual Testing Example:
+
+Access another tenant’s data:
+
+curl -H "Authorization: Bearer <tenantA_token>" \
+https://api.company.com/tenantB/data
+
+## Tooling Integration:
+
+Snyk: 
+detect missing authorization checks, insecure middleware
+
+HackerOne:
+identify IDOR and auth bypass patterns
+
+# Output: Authorization gaps, tenant isolation risks
+
+---
+
+### Phase 5 – Threat Modeling & Abuse Path Analysis
+
+Objective: 
 Identify realistic attacker goals and abuse paths.
 
-# Activities
+## Manual Techniques
+
 Define attacker profiles:
+
 - External unauthenticated attacker
 - Authenticated low-privilege user
 - Compromised internal service
 
-Identify attacker goals:
-- Data access
-- Privilege escalation
+Map abuse paths:
 - Lateral movement
-- Service disruption
+- Privilege escalation
+- Data exfiltration
 
-Focus on how controls can be bypassed, not theoretical threats
+Example Abuse Path:
+Compromised API token → internal service trust → admin API → database dump
 
-Output:
-- Documented abuse paths
-- High-impact attack scenarios
+## Tooling Integration
 
-----
+CrowdStrike:
+validate detection coverage along abuse paths, identify blind spots
 
-### Step 6: Failure & Abuse Analysis
+# Output: Documented abuse scenarios, attack chains
+
+---
+
+### Phase 6 – Security Control Placement Review
 
 Objective:
-Understand what happens when controls fail.
+Validate where controls exist and where they should exist.
 
-# Activities
-Analyze:
-- Control misconfigurations
-- Credential compromise scenarios
-- Dependency failures
+## Manual Techniques
+
+Review controls:
+- Authentication
+- Authorization
+- Rate limiting
+- Input validation
+- Logging & monitoring
+
+Validate placement at:
+- Entry points
+- Service boundaries
+- Privilege boundaries
+
+Identify over-centralized or missing controls
+
+## Tooling Integration:
+
+CrowdStrike: 
+validate runtime controls
+
+Rapid7: 
+validate infrastructure control coverage
+
+# Output: Control gaps, detection weaknesses
+
+---
+
+### Phase 7 – Failure Mode & Blast Radius Analysis
+
+Objective:
+Understand impact when controls fail.
+
+# Manual Techniques
+
+Simulate:
+- Token compromise
+- Service compromise
+- CI/CD breach
 
 Identify:
-- Blast radius
 - Lateral movement paths
 - Single points of failure
 
-Key Questions:
-
-- If this control fails, what can an attacker access?
-- How far can an attacker move?
-- Is detection likely or unlikely?
+# Output: Blast radius analysis, worst-case impact scenarios
 
 ---
 
-### Step 7: Risk Prioritization
+### Phase 8 – Risk Prioritization & Reporting
 
 Objective:
-Ensure findings are meaningful and actionable.
+Translate findings into actionable enterprise risk.
 
-# Activities:
+Activities:
+- Prioritize findings based on impact, exploitability, scope
+- Map technical risk to business impact, regulatory, and operational risk
 
-Prioritize findings based on:
+# Tooling Integration
 
-- Impact
-- Exploitability
-- Scope of exposure
+Jira / ServiceNow: 
+create architecture risk tickets, assign ownership, track remediation
 
-Map technical risk to:
-- Business impact
-- Regulatory risk
-- Operational risk
+Python Automation Example:
+import requests
 
-Outcome:
-- Fewer findings
-- Higher quality
-- Clear remediation direction
+payload = {
+    "short_description": "Missing authorization between services",
+    "impact": "High",
+    "description": "Architecture review identified implicit trust..."
+}
+
+requests.post(
+    "https://servicenow.company.com/api/now/table/incident",
+    auth=("user","token"),
+    json=payload
+)
+
+# Output: Risk-prioritized findings, tickets, actionable remediation
 
 ---
 
-### Step 8: Reporting & Communication
+### Phase 9 – Continuous Improvement & Automation
 
-Objective:
-Communicate architectural risk effectively to stakeholders.
+Objective: 
+Reduce repeat findings and improve security maturity.
 
-# Activities:
+Automation Use Cases:
+- Auto-tag applications with architecture risk
+- Correlate Snyk + Rapid7 findings
+- Power BI dashboards for systemic issues
 
-Document:
-- Affected components
-- Trust boundaries involved
-- Attack scenarios
-- Business impact
+# Python Example – Correlate Findings:
 
-Provide:
-- Clear remediation guidance
-- Design-level recommendations
+def correlate(vulns, architecture_risks):
+    return [v for v in vulns if v["component"] in architecture_risks]
 
-Best Practices:
-- Avoid tool-centric language
-- Use diagrams and flow descriptions
-- Align recommendations with engineering realities
-
-Expected Outputs:
-- High-level architecture diagrams
-- Trust boundary mapping
-- Documented architectural weaknesses
-- Realistic attack scenarios
+# Deliverables:
+- Architecture diagrams
+- Trust boundary maps
+- Abuse scenarios
 - Risk-prioritized findings
-- Actionable remediation guidance
+- Jira / ServiceNow tickets
+- Executive-ready reports
+
+---
+
+### What Senior AppSec Engineers Do Differently
+- Focus on design flaws, not just CVEs
+- Use tools for signal, not decisions
+- Translate security into engineering language
+- Automate reporting, not thinking
+- Reduce future vulnerability volume
+
+---
+
+### Ethics & Authorization
+All activities require:
+- Explicit authorization
+- Defensive security intent
+- Alignment with organizational policy
 
 ---
 
 ## Notes:
-This methodology is designed for authorized security assessments only.
-It is intended to support defensive security, secure design, and enterprise AppSec programs.
+This methodology is intended for defensive security, secure design, and enterprise AppSec programs.

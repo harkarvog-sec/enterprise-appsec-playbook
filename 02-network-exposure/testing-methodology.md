@@ -1,171 +1,299 @@
 # Network Exposure – Testing Methodology
 
-Overview:
+## Overview
 
-This methodology describes a structured approach to identifying network-exposed assets, mapping network reachability, and assessing the potential attack surface.  
-The focus is on understanding both external and internal exposure, ensuring that critical assets are identified and prioritized for remediation.
+This methodology defines a manual-first, attacker-minded approach to identifying and validating network exposure risks across enterprise environments.
 
-All activities assume authorized testing environments only.
+The goal is not simply to enumerate open ports, but to understand:
+- What is reachable
+- From where
+- By whom
+- With what level of trust and blast radius
+
+Automation is used to scale, validate, and operationalize findings discovered through manual analysis.
+
+All activities assume explicit authorization.
 
 ---
 
 ## Guiding Principles
 
-- External and internal network exposure must be considered together  
-- Automation supports, but does not replace, manual verification  
-- Discover shadow or forgotten infrastructure that may increase risk  
-- Validate firewalls, VPNs, and segmentation controls
-- Document everything in a structured inventory
+- Network access is a security control — not a trust guarantee
+- Internal networks must be treated as hostile by default
+- Exposure + weak identity controls = compromise
+- Blast radius matters more than individual findings
+- Manual validation precedes automation and reporting
 
 ---
 
-## Step 1: Define Scope
+## Step 1: Define Network Exposure Scope
 
-Determine which network segments, hosts, and services are in scope:
+Before testing, clearly define:
 
-- Public IPs and DNS domains  
-- Internal subnets and VLANs  
-- Cloud-hosted services and endpoints  
-- VPN, DMZ, and hybrid network zones
+- Environments (prod, staging, dev, sandbox)
+- Network zones (public, private, restricted)
+- Cloud vs on-prem infrastructure
+- Expected exposure model (what should be reachable)
+- Critical systems and sensitive data paths
 
-Deliverable: Clear scope definition to avoid blind spots
+### Deliverable
+- Defined exposure assumptions to validate or break
 
 ---
 
-## Step 2: External Network Discovery
+## Step 2: External Network Exposure Identification
 
-- Identify all externally reachable hosts and services
+Identify all internet-reachable assets.
 
-### Commands
+### Manual Validation
 
-'''bash
-# Ping known domains/IPs
-ping target.com
+'''bash'''
 
-# Check HTTP/HTTPS availability
-curl -I https://target.com
-
-# Port scan common services
 nc -vz target.com 80
 nc -vz target.com 443
+curl -I https://target.com
 
-# Discover open TCP ports (authorized only)
-nmap -Pn target.com
+Validate:
 
-#### What this validates:
+- Open ports and listening services
+- TLS usage and protocol enforcement
+- Unexpected or legacy endpoints
+- Admin, debug, or health interfaces
 
-- Public-facing hosts and endpoints
-- Open ports and services
-- TLS/HTTPS configuration
-- Potential attack vectors for external attackers
+## Automation & Tooling
 
-## Deliverable:
-External host and service inventory
+- Rapid7 InsightVM – Discover externally exposed assets and services
 
----
+- CrowdStrike – Identify exposed hosts tied to endpoint inventory
 
-#### Step 3: Internal Network Discovery
+- HackerOne – Correlate exposure patterns with historical external reports
 
-- Map internal network segments, live hosts, and services
+## Deliverables
 
-### Commands:
-
-# Ping internal hosts
-ping 10.0.0.5
-
-# Test service availability
-nc -vz 10.0.0.5 22
-nc -vz 10.0.0.5 443
-
-# Trace network path
-traceroute 10.0.0.5
-
-# List connected devices (example for authorized LAN)
-arp -a
-
-#### What this validates:
-
-- Internal host reachability
-- Network segmentation and trust boundaries
-- Shadow services or unmanaged hosts
-
-### Deliverable: 
-Internal network map with reachable hosts
+- List of externally exposed hosts, services, and ports
+- Identification of unintended public access
 
 ---
 
-#### Step 4: Firewall and Segmentation Verification
+### Step 3: Internal Network Reachability & Trust Assumptions
 
-- Validate whether firewall rules, ACLs, and segmentation controls are effective
+Validate assumptions around internal-only access.
 
-### Commands:
+## Manual Validation
 
-# Test restricted port access from different network segments
-nc -vz 10.0.1.10 3306
+curl http://internal-service.local/health
+curl http://internal-service.local/admin
 
-# Verify VPN access limitations
-curl --interface tun0 https://internal-service.local
 
-#### What this validates:
+Check:
 
-- Enforcement of network segmentation
-- Restricted access between zones
-- Potential lateral movement paths
+- Services relying solely on network location
+- Missing authentication on internal APIs
+- Over-trusted internal endpoints
 
-#### Deliverable:
-Firewall and segmentation validation report
+### Automation & Tooling
+
+Rapid7 – Internal scanning to validate reachability
+
+CrowdStrike – Detect internal service exposure on endpoints
+
+ServiceNow CMDB – Cross-check discovered services vs documented intent
+
+## Deliverables
+
+- Inventory of internal services lacking proper auth
+- Trust boundary violations
 
 ---
 
-### Step 5: Cloud and Hybrid Exposure
+### Step 4: Segmentation & Lateral Movement Analysis
 
-- Identify cloud-hosted endpoints and services
+Assess east-west traffic and blast radius.
 
-#### Commands / Tools:
+## Manual Techniques
 
-# List cloud instances and IPs (AWS example)
-aws ec2 describe-instances --query "Reservations[*].Instances[*].[InstanceId,PublicIpAddress,PrivateIpAddress]"
+- Review subnet layouts and routing
+- Validate unrestricted service-to-service access
+- Identify pivot paths between environments
+- Assess impact of a single compromised host
 
-# Check security groups / network ACLs
+## Automation & Tooling
+
+Rapid7 – Network segmentation visibility
+
+CrowdStrike – Lateral movement detections
+
+Power BI – Visualize segmentation gaps and exposure paths
+
+## Deliverables
+
+- Lateral movement paths
+- Segmentation weaknesses
+- Blast radius assessment
+
+### Step 5: Cloud Network Exposure Validation
+
+Review cloud-native network controls.
+
+## Manual Validation (AWS example)
+
 aws ec2 describe-security-groups
+aws ec2 describe-network-interfaces
 
-#### What this validates:
+Validate:
 
-- Publicly exposed cloud assets
-- Misconfigured security groups or network rules
-- Overly permissive access
+- Overly permissive inbound/outbound rules
+- Environment separation (prod vs non-prod)
+- Public exposure of private services
+- Shared network components increasing blast radius
 
-#### Deliverable:
-Cloud network exposure map
+### Automation & Tooling
 
----
+Rapid7 Cloud Risk – Cloud exposure and misconfigurations
 
-### Step 6: Reporting & Risk Assessment
+ServiceNow – Track cloud exposure findings
 
-- Document all findings in a structured format (CSV, spreadsheet, CMDB)
+Power BI – Trend cloud network risk over time
 
-Example CSV format:
+## Deliverables
 
-Host, IP, Network Zone, Open Ports, Service, Exposure, Owner
-webapp.target.com, 203.0.113.10, DMZ, 80, HTTP, External, Web Team
-db.internal.local, 10.0.1.5, Internal, 3306, MySQL, Internal, DB Team
-
-### Deliverable: 
-Complete network exposure inventory with risk classification
+- Cloud network exposure inventory
+- High-risk security group or firewall findings
 
 ---
 
-### Key Takeaways:
+### Step 6: Management & Administrative Access Exposure
 
-- Network exposure mapping identifies critical entry points
-- Validates segmentation and access controls
-- Provides data to prioritize remediation and vulnerability scanning
-- Supports enterprise-level threat modeling and security reporting
+Identify exposed management interfaces.
+
+## Manual Validation
+
+nc -vz target.com 22
+nc -vz target.com 3389
+
+Validate:
+
+- SSH, RDP, admin consoles
+- IP allowlisting or VPN enforcement
+- MFA coverage
+- Weak or legacy access paths
+
+## Automation & Tooling
+
+CrowdStrike – Identify exposed management services on endpoints
+
+Rapid7 – Admin interface discovery
+
+Jira / ServiceNow – Track remediation actions
+
+## Deliverables
+
+- Exposed administrative interfaces
+- Identity and access gaps
 
 ---
 
-### Notes:
+### Step 7: Egress & Outbound Traffic Controls
 
-- Re-run scans after network changes or new deployments
-- Use authorized testing only; never scan external or third-party networks without permission
-- Combine automated tools (nmap, cloud APIs) with manual verification for accuracy
+Assess outbound connectivity risks.
+
+## Manual Validation
+
+- Test arbitrary outbound connections
+- Identify unrestricted internet access
+- Validate data exfiltration paths
+
+## Automation & Tooling
+
+CrowdStrike – Detect suspicious outbound connections
+
+Rapid7 – Identify systems with unrestricted egress
+
+Power BI – Visualize outbound exposure trends
+
+## Deliverables
+
+- Egress control gaps
+- Data exfiltration risk paths
+
+---
+
+### Step 8: Detection, Monitoring & Response Validation
+
+Ensure exposure is visible and actionable.
+
+## Validate:
+
+- Network event logging
+- Alerting on unexpected access
+- Incident response readiness
+
+## Tooling Integration
+
+CrowdStrike – Real-time detection
+
+Rapid7 – Exposure monitoring
+
+ServiceNow – Incident and vulnerability workflows
+
+Power BI – Executive and operational reporting
+
+## Deliverables
+
+- Detection gaps
+- Monitoring coverage assessment
+
+---
+
+### Step 9: Risk Prioritization & Reporting
+
+Prioritize findings based on:
+
+- Exposure level
+- Blast radius
+- Data sensitivity
+- Likelihood of exploitation
+
+# Operational Workflow
+
+- Findings → Jira / ServiceNow
+- External patterns → HackerOne
+- Risk trends → Power BI
+- Validation → Manual re-testing
+
+---
+
+### Outputs
+
+A mature network exposure assessment produces:
+
+- External and internal exposure inventory
+- Segmentation and lateral movement paths
+- Cloud and on-prem network risks
+- Management and egress exposure findings
+- Risk-prioritized remediation backlog
+
+---
+
+### Why This Matters
+
+Network exposure failures often:
+
+- Bypass application security controls
+- Enable lateral movement and full environment compromise
+- Turn low-impact bugs into critical incidents
+
+Strong network exposure validation:
+- Reduces attack surface
+- Limits blast radius
+- Improves detection and response
+- Strengthens overall AppSec maturity
+
+---
+
+### Notes
+
+- Network exposure changes constantly — reassess regularly
+- Manual validation is mandatory before automation
+- Treat internal networks as untrusted
+- Never test without explicit authorization

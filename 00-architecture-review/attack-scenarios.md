@@ -1,194 +1,298 @@
 # Architecture Review – Attack Scenarios
 
+---
+
+## Real-World Architecture-Level Attack Scenarios
+
 Overview:
+This document captures realistic, high-impact attack scenarios that arise from architectural and trust design flaws, not missing patches or simple misconfigurations.
 
-- This document highlights realistic abuse paths and design-level risks discovered during architecture review.
-Focus is on systemic impact, not endpoint-level vulnerabilities.
+Each scenario includes:
 
-- All scenarios assume authorized assessment environments only.
+* Attacker goal and preconditions
+* Architectural weakness
+* Manual exploitation techniques with command examples
+* How enterprise security tools detect (or miss) the issue
+* How Senior Application Security Engineers validate, document, and automate response
 
----
+These scenarios are derived from real enterprise breaches, bug bounty trends, and incident response investigations.
 
-### Scenario 1: Over-Trusted Internal Services
-
-####Context:
-Internal microservices assume requests from other services are trustworthy.
-
-#### Validation Commands
-- Identify internal service endpoints
-
-curl -k https://internal-api.service.local/health
-
-- Attempt access without service authentication
-
-curl -k https://internal-api.service.local/admin/config
-
-#### What This Validates:
-- Whether internal services enforce authentication
-- Whether network location is incorrectly treated as trust
-
-#### Exploit Path:
-- Compromise a low-privilege service account.
-- Send crafted requests to higher-privileged services.
-- Access or manipulate sensitive data without further authentication.
-
-#### Impact:
-- Unauthorized access to critical data
-- Potential privilege escalation across services
-
-#### Mitigation:
-- Enforce service-to-service authentication and authorization
-- Limit service account privileges
-- Monitor anomalous internal traffic
+All scenarios assume explicit authorization and defensive security intent.
 
 ---
 
-### Scenario 2: Missing Authorization Between Services
+## Scenario 1 – Over-Trusted Internal Microservices
 
-#### Context:
-PIs expose sensitive endpoints internally, relying on perimeter controls.
+### Attacker Goal
 
-#### Validation Commands
-- Use a low-privilege token to access sensitive endpoints
+Gain administrative access by abusing implicit trust between internal services.
 
-curl -H "Authorization: Bearer LOW_PRIV_TOKEN" \
-     https://api.internal.local/admin/users
+### Architectural Weakness
 
-#### What This Validates:
-- Absence of authorization checks at service boundaries
-- Reliance on upstream enforcement only
+* Internal services trust network location
+* Missing service-to-service authorization
+* No identity validation between microservices
 
-#### Exploit Path:
-- Attacker compromises a service within the network.
-- Calls API endpoints without any authorization checks.
+### Real-World Pattern
 
-#### Impact:
-- Lateral movement
-- Data exfiltration
-- Service disruption
+Attackers compromise a low-privilege service, pivot internally, and access admin APIs with no auth enforcement.
 
-#### Mitigation:
-- Implement role-based or attribute-based authorization between services
-- Use tokens or mutual TLS for service authentication
-- Audit internal API calls
+### Manual Exploitation Techniques
 
-----
+'''bash'''
+Direct access to internal admin endpoint:
+curl http://internal-user-service:8080/admin/users
 
-### Scenario 3: Misconfigured Cloud IAM Roles
+Replay a stolen service token:
+curl -H "Authorization: Bearer <service_token>" \
+http://internal-admin-api:8080/config
 
-#### Context:
-Cloud services (AWS/Azure) assigned broad permissions by default.
+### Tooling Perspective
 
-#### Validation Commands (AWS Example)
-- Identify active IAM role:
-  
-aws sts get-caller-identity
+* Rapid7: May identify exposed internal services, not trust logic
+* CrowdStrike: Often blind to legitimate-looking internal API calls
+* Snyk: Can flag missing auth middleware in code
 
-- List permissions available to the role:
+### AppSec Validation Steps
 
-aws iam list-attached-role-policies --role-name AppServiceRole
+* Enumerate all internal APIs
+* Test unauthenticated and cross-service access
+* Require explicit service identity and authorization
 
-#### What This Validates:
-- Excessive permissions
-- Violation of least privilege
+### Automation Example (Python)
 
-#### Exploit Path:
-- Attacker gains access to a compromised service account.
-- Uses default IAM permissions to escalate privileges across cloud resources.
+'''python'''
 
-#### Impact:
-- Full tenant compromise
-- Data exposure or deletion
-- Service availability impact
-
-#### Mitigation:
-- Apply principle of least privilege
-- Audit IAM roles regularly
-- Monitor unusual API calls
-
-----
-
-### Scenario 4: Weak or Missing Audit and Detection
-
-#### Context:
-Critical actions are not logged or monitored.
-
-#### Validation Commands
-- Perform sensitive action and observe logging
-
-curl -X POST https://api.service.local/admin/reset-password \
-     -H "Authorization: Bearer VALID_TOKEN"
-
-
-Then verify:
-- Application logs
-- SIEM ingestion
-- Alerting behavior
-
-#### What This Validates:
-- Logging coverage
-- Detection gaps
-- Incident response readiness
-
-#### Exploit Path
-- Attacker exploits a misconfigured internal service.
-- Performs actions without triggering alerts.
-
-#### Impact:
-- Extended dwell time
-- Difficulty in incident detection and response
-
-#### Mitigation:
-- Ensure all critical operations are logged
-- Integrate logs into SIEM/monitoring pipeline
-- Alert on anomalous patterns
+services = ["user", "billing", "admin"]
+for s in services:
+    r = requests.get(f"http://internal-{s}:8080/admin")
+    if r.status_code == 200:
+        print(f"[!] Unprotected admin endpoint: {s}")
 
 ---
 
-### Scenario 5: Implicit Trust in Upstream Identity Providers
+## Scenario 2 – Token Reuse Across Trust Boundaries
 
-#### Context:
-- Systems rely solely on upstream identity assertions without internal validation.
+### Attacker Goal
 
-##33 Validation Commands
-- Replay or modify identity token claims (authorized testing)
+Escalate privileges using a valid but mis-scoped token.
 
-curl -H "Authorization: Bearer MODIFIED_TOKEN" \
-     https://service.local/privileged/resource
+### Architectural Weakness
 
-#### What This Validates:
-- Token validation enforcement
-- Scope and audience verification
+* Same JWT reused across services
+* Missing audience (`aud`) validation
+* No service-specific authorization
 
-#### Exploit Path:
-Attacker manipulates token or identity assertion.
-Gains unauthorized access to downstream services.
+### Manual Exploitation
 
-#### Impact:
-- Escalation of privilege
-- Unauthorized access to sensitive resources
+```bash
+curl -H "Authorization: Bearer <user_token>" \
+https://api.company.com/internal/admin
+```
 
-#### Mitigation:
-- Validate identity tokens internally
-- Apply strict token expiration and scope checks
-- Monitor unusual authentication patterns
+### Tooling Perspective
 
-#### Summary:
-| Risk Area	                            | Impact	                                  | Recommended Controls                         |
-|---------------------------------------|-------------------------------------------|----------------------------------------------|
-| Over-trusted internal services	      | Unauthorized data access	                | Service-to-service auth, least privilege     |
-| Missing authorization	                | Lateral movement	                        | Internal API auth, RBAC/ABAC                 | 
-| Misconfigured cloud IAM	              | Full tenant compromise	                  | Principle of least privilege, IAM audits     |
-| Weak auditing	                        | Delayed detection	                        | Logging, SIEM alerts                         |
-| Implicit trust in identity	          | Privilege escalation	                    | Internal token validation, scope enforcement |
+* **HackerOne**: Repeated IDOR/auth bypass reports signal design failure
+* **Snyk**: May flag missing token validation logic
+
+### AppSec Insight
+
+Multiple auth bugs usually indicate **one broken trust model**.
+
+### Automation Example
+
+```python
+def test_token_reuse(token, endpoints):
+    for ep in endpoints:
+        r = requests.get(ep, headers={"Authorization": f"Bearer {token}"})
+        if r.status_code == 200:
+            print(f"[!] Token reuse possible: {ep}")
+```
 
 ---
 
-# Key Takeaway
+## Scenario 3 – Broken Tenant Isolation (Multi-Tenant Systems)
 
-These scenarios demonstrate that architecture flaws are validated through behavior, not just documentation.
+### Attacker Goal
 
-Commands are used to:
-- Confirm trust assumptions
-- Validate control placement
-- Measure blast radius
+Access another tenant’s data.
+
+### Architectural Weakness
+
+* Tenant ID supplied by client
+* Backend trusts client-controlled identifiers
+* No server-side tenant enforcement
+
+### Manual Exploitation
+
+```bash
+curl -H "Authorization: Bearer <tenantA_token>" \
+https://api.company.com/tenant/tenantB/data
+```
+
+### Tooling Perspective
+
+* **HackerOne**: High-volume IDOR findings
+* **Power BI**: Tracks tenant isolation failures across apps
+
+### AppSec Validation
+
+* Ensure tenant context derived server-side
+* Test cross-tenant access across all APIs
+
+---
+
+## Scenario 4 – CI/CD Pipeline as a Privilege Escalation Vector
+
+### Attacker Goal
+
+Use CI/CD access to compromise production.
+
+### Architectural Weakness
+
+* CI runners hold production credentials
+* Secrets reused across environments
+* No approval or segregation gates
+
+### Manual Techniques
+
+```bash
+# Dump environment variables from CI job
+env | grep AWS
+```
+
+### Tooling Perspective
+
+* **CrowdStrike**: Limited visibility into CI/CD runtimes
+* **Snyk**: Detects pipeline misconfigurations and secrets
+
+### AppSec Validation
+
+* Review pipeline permissions
+* Enforce build vs deploy separation
+
+---
+
+## Scenario 5 – Centralized Secrets with Excessive Access
+
+### Attacker Goal
+
+Extract secrets to access multiple systems.
+
+### Architectural Weakness
+
+* Global secrets store
+* Broad access policies
+* No per-service scoping
+
+### Manual Exploitation
+
+```bash
+aws secretsmanager get-secret-value \
+--secret-id prod/global
+```
+
+### Tooling Perspective
+
+* **Rapid7**: Detects cloud misconfigurations
+* **CrowdStrike**: Detects abuse only if anomalous
+
+### Automation Example
+
+```python
+def find_overexposed_secrets(policies):
+    return [p for p in policies if p.get("scope") == "*"]
+```
+
+---
+
+## Scenario 6 – Logging & Detection Blind Spots
+
+### Attacker Goal
+
+Operate without detection.
+
+### Architectural Weakness
+
+* Missing logs at trust boundaries
+* No alerts for auth failures
+* Logs not centrally aggregated
+
+### Manual Validation
+
+```bash
+curl -H "Authorization: Bearer invalid" \
+https://api.company.com/admin
+```
+
+### Tooling Perspective
+
+* **CrowdStrike**: Endpoint-focused, misses API abuse
+* **Power BI**: Highlights missing telemetry zones
+
+---
+
+## Scenario 7 – Bug Bounty Signal → Architecture Failure
+
+### Attacker Goal
+
+Exploit the same flaw across many endpoints.
+
+### Architectural Weakness
+
+* Shared insecure design pattern
+* No systemic remediation
+
+### AppSec Response Pattern
+
+* Aggregate HackerOne reports
+* Identify shared root cause
+* Fix once, not 50 times
+
+### Automation Example
+
+```python
+def group_by_root_cause(reports):
+    causes = {}
+    for r in reports:
+        causes.setdefault(r["pattern"], []).append(r)
+    return causes
+```
+
+---
+
+## Reporting & Workflow Integration
+
+### Jira / ServiceNow
+
+* Architecture risks logged as design issues
+* Linked to multiple vulnerabilities
+* Assigned to platform teams
+
+### Power BI
+
+Track:
+
+* Recurring architecture flaws
+* Time-to-remediate systemic issues
+* Vulnerability reduction after fixes
+
+---
+
+## Key Takeaways for Senior AppSec Engineers
+
+* Architecture flaws amplify attacker impact
+* Tools detect symptoms, not root causes
+* Manual testing exposes trust failures
+* Automation scales insight, not judgment
+* Fixing design issues reduces future vuln volume
+
+---
+
+## Ethics & Authorization
+
+All scenarios assume:
+
+* Explicit authorization
+* Defensive security intent
+* Compliance with organizational policy

@@ -1,24 +1,26 @@
 # Architecture Review – Security Checklist
 
+
 ## Enterprise Application Security Architecture Review Checklist
 
-> **Audience:** Senior Application Security Engineers
-> **Usage:** Design reviews, threat modeling workshops, live architecture assessments
-> **Scope:** Enterprise / regulated environments
+
+> **Audience:** Senior Application Security Engineers  
+> **Usage:** Design reviews, threat modeling workshops, live architecture assessments  
+> **Scope:** Enterprise / regulated environments  
 > **Philosophy:** Manual-first, attacker-driven validation. Tools provide signal—not answers.
 
 ---
 
 ## Overview
 
-This checklist is a **practical, field-tested validation guide** for conducting enterprise-grade architecture reviews.
+This checklist is a **practical, field-tested validation guide** for enterprise-grade architecture reviews.  
 
 It is designed to:
 
 * Support **manual-first, attacker-driven reviews**
-* Align directly with `testing-methodology.md`
+* Align with `testing-methodology.md`
 * Be usable during **design reviews, threat modeling sessions, and live assessments**
-* Integrate with **enterprise security tooling and automation workflows**
+* Integrate with **enterprise tooling and automation workflows**
 
 Each section includes:
 
@@ -27,6 +29,7 @@ Each section includes:
 * Manual techniques and command examples
 * How enterprise tools help (and where they don’t)
 * Optional Python/API automation ideas
+* Control Pattern mapping
 
 All activities assume **explicit authorization** and **defensive security intent** only.
 
@@ -47,6 +50,7 @@ All activities assume **explicit authorization** and **defensive security intent
 ---
 
 ## 1. System Decomposition & Asset Inventory
+**Control Patterns:** 3 (IAM), 4 (Secrets), 5 (Logging)
 
 ### Validate
 
@@ -60,12 +64,12 @@ All activities assume **explicit authorization** and **defensive security intent
 * Shadow APIs bypass security review entirely
 
 ### Manual Techniques & Commands
-
 ```bash
 # Kubernetes discovery
 kubectl get namespaces
 kubectl get svc -A
 kubectl get pods -A
+
 
 # AWS discovery
 aws ec2 describe-instances
@@ -75,11 +79,12 @@ aws iam list-roles
 
 ### Tooling Usage
 
-* **Rapid7**: Compare scanner coverage vs actual deployed assets
-* **CrowdStrike**: Confirm runtime protection on hosts and containers
+Rapid7: Compare scanner coverage vs actual deployed assets
+CrowdStrike: Confirm runtime protection on hosts and containers
 
-### Automation Idea
+**Tool Limitation**: Cannot detect implicit trust or misconfigured authorization — requires manual verification.
 
+### Automation Idea:
 ```python
 def find_unowned_assets(assets):
     return [a for a in assets if not a.get("owner")]
@@ -87,33 +92,35 @@ def find_unowned_assets(assets):
 
 ---
 
-## 2. Trust Boundary Identification
+#### 2. Trust Boundary Identification
 
-### Validate
+**Control Patterns**: 1 (mTLS), 2 (Token Scoping), 8 (Tenant Isolation)
+
+Validate:
 
 * All trust boundaries are explicitly identified
 * Network location is not treated as a trust signal
 * Service-to-service identity is enforced
 
-### Real-World Failures
+Real-World Failures:
 
 * Internal APIs exposed without authentication
 * Implicit trust inside VPCs or Kubernetes clusters
 
-### Manual Techniques
-
+## Manual Techniques
+# Test unauthenticated internal access:
 ```bash
-# Test unauthenticated internal access
 curl http://internal-api:8080/admin
 ```
 
-### Tooling Usage
+## Tooling Usage
 
-* **Snyk**: Identify missing auth middleware or guardrails
-* **HackerOne**: Repeated auth bugs often indicate architectural flaws
+* Snyk: Identify missing auth middleware or guardrails
+* HackerOne: Repeated auth bugs often indicate architectural flaws
 
-### Automation Idea
+**Tool Limitation**: Cannot validate token audience enforcement or per-service RBAC — manual testing required.
 
+## Automation Idea
 ```python
 import requests
 
@@ -125,61 +132,64 @@ def test_internal_endpoints(endpoints):
 
 ---
 
-## 3. Data Flow & Sensitive Data Handling
+### 3. Data Flow & Sensitive Data Handling
 
-### Validate
+**Control Patterns**: 4 (Secrets), 8 (Tenant Isolation)
+
+Validate:
 
 * Sensitive data types identified (PII, PHI, tokens, credentials)
 * Encryption enforced in transit and at rest
 * Logs do not expose secrets or sensitive data
 
-### Real-World Failures
+## Real-World Failures
 
 * Tokens logged in plaintext
 * PII flowing to unintended downstream services
 
-### Manual Techniques
-
-```bash
+## Manual Techniques
 # Search logs for secrets
+```bash
 grep -R "Authorization:" /var/log/
 ```
 
-### Tooling Usage
+## Tooling Usage:
 
-* **Rapid7**: Correlate data stores with exposure paths
-* **Power BI**: Track regulated data handling across applications
+Rapid7: Correlate data stores with exposure paths
+Power BI: Track regulated data handling across applications
+
+**Tool Limitation**: Cannot verify tenant isolation or misuse of scoped secrets.
 
 ---
 
-## 4. Authentication & Authorization
+### 4. Authentication & Authorization
 
-### Validate
+**Control Patterns**: 2 (Token Scoping), 3 (IAM), 8 (Tenant Isolation)
+
+Validate:
 
 * Authentication and authorization are separate controls
 * RBAC / ABAC enforced server-side
 * Tokens are scoped, audience-validated, and short-lived
 
-### Real-World Failures
+## Real-World Failures
 
 * Token reuse across services
 * Client-supplied role or tenant identifiers
 
-### Manual Techniques
-
-```bash
+## Manual Techniques
 # Attempt cross-tenant access
+``` bash
 curl -H "Authorization: Bearer <token>" \
 https://api.company.com/tenant/other/data
 ```
 
-### Tooling Usage
+## Tooling Usage
 
-* **Snyk**: Detect missing authorization checks
-* **HackerOne**: High IDOR volume signals architectural gaps
+* Snyk: Detect missing authorization checks
+* HackerOne: High IDOR volume signals architectural gaps
 
-### Automation Idea
-
+## Automation Idea
 ```python
 import requests
 
@@ -192,78 +202,82 @@ def detect_token_reuse(token, endpoints):
 
 ---
 
-## 5. Service-to-Service Communication
+### 5. Service-to-Service Communication
 
-### Validate
+**Control Patterns**: 1 (mTLS), 2 (Token Scoping), 3 (IAM)
+
+Validate:
 
 * Strong identity between services (mTLS, workload identity)
 * Least-privilege permissions enforced
 * No shared or long-lived credentials
 
-### Real-World Failures
+## Real-World Failures
 
 * One compromised service leads to environment-wide access
 
-### Manual Techniques
-
+## Manual Techniques
+# Replay service token:
 ```bash
-# Replay service token
 curl -H "Authorization: Bearer <service_token>" \
 http://internal-admin:8080/config
 ```
 
-### Tooling Usage
+## Tooling Usage
 
-* **CrowdStrike**: Detect anomalous lateral movement
-* **Rapid7**: Identify overly exposed internal services
+* CrowdStrike: Detect anomalous lateral movement
+* Rapid7: Identify overly exposed internal services
+
+**Tool Limitation**: Cannot verify certificate rotation or token scoping — manual checks required.
 
 ---
 
-## 6. CI/CD & Supply Chain Security
+### 6. CI/CD & Supply Chain Security
 
-### Validate
+**Control Patterns**: 3 (IAM), 4 (Secrets), 6 (CI/CD Security Controls)
+
+Validate:
 
 * CI pipelines cannot access production secrets
 * Build and deploy identities are separated
 * Manual approvals exist for sensitive stages
 
-### Real-World Failures
+## Real-World Failures
 
 * CI runners leaking cloud credentials
 
-### Manual Techniques
-
+## Manual Techniques
 ```bash
 env | grep AWS
 ```
 
-### Tooling Usage
+## Tooling Usage
 
-* **Snyk**: Pipeline misconfigurations and secret detection
-* **CrowdStrike**: Limited CI/CD visibility — validate manually
+* Snyk: Pipeline misconfigurations and secret detection
+* CrowdStrike: Limited CI/CD visibility — validate manually
 
----
+--- 
 
-## 7. Secrets Management
+### 7. Secrets Management
 
-### Validate
+**Control Patterns**: 4 (Secrets)
+
+Validate:
 
 * Secrets scoped per service
 * No global or shared secrets
 * Rotation and access logging enabled
 
-### Real-World Failures
+## Real-World Failures
 
 * One secret unlocks many systems
 
-### Manual Techniques
-
+## Manual Techniques:
 ```bash
 aws secretsmanager list-secrets
 ```
 
-### Automation Idea
-
+## Automation Idea:
 ```python
 def find_global_secrets(secrets):
     return [s for s in secrets if s.get("scope") == "global"]
@@ -271,60 +285,64 @@ def find_global_secrets(secrets):
 
 ---
 
-## 8. Logging, Monitoring & Detection
+### 8. Logging, Monitoring & Detection
 
-### Validate
+**Control Patterns**: 5 (Logging & Detection)
+
+Validate:
 
 * Logs exist at trust boundaries
 * Authentication failures are logged and alerted
 * Logs are centrally aggregated
 
-### Real-World Failures
+## Real-World Failures
 
 * Attackers operate without detection
 
-### Manual Techniques
-
+## Manual Techniques
+# Trigger auth failure:
 ```bash
-# Trigger auth failure
 curl -H "Authorization: Bearer invalid" https://api.company.com/admin
 ```
 
-### Tooling Usage
+## Tooling Usage
 
-* **CrowdStrike**: Endpoint-focused signals only
-* **Power BI**: Identify missing telemetry zones
+* CrowdStrike: Endpoint-focused signals only
+* Power BI: Identify missing telemetry zones
 
 ---
 
-## 9. Failure Modes & Blast Radius
+### 9. Failure Modes & Blast Radius
 
-### Validate
+**Control Patterns**: All
+
+Validate:
 
 * Impact of token or service compromise is understood
 * Lateral movement paths identified
 
-### Manual Exercise
+## Manual Exercise
 
 * Assume service or token compromise
 * Enumerate accessible systems, data, and actions
 
 ---
 
-## 10. Risk Prioritization & Reporting
+### 10. Risk Prioritization & Reporting
 
-### Validate
+**Control Patterns**: All
+
+Validate:
 
 * Findings mapped to business impact
 * Architecture risks tracked as first-class issues
 
-### Tooling Usage
+## Tooling Usage
 
-* **Jira / ServiceNow**: Track architecture-level risks
-* **Power BI**: Trend systemic weaknesses
+* Jira / ServiceNow: Track architecture-level risks
+* Power BI: Trend systemic weaknesses
 
-### Automation Example
-
+## Automation Example:
 ```python
 import requests
 
@@ -338,17 +356,38 @@ requests.post(JIRA_URL, json=payload, auth=AUTH)
 
 ---
 
-## How Senior AppSec Engineers Use This Checklist
+### 11. Approval & Completion Criteria
 
-* Validate design, not just implementation
-* Focus on trust boundaries and blast radius
-* Use tools for signal, not truth
-* Automate reporting, not judgment
-* Fix root causes, not individual symptoms
+A checklist review is considered complete only if:
+
+* All trust boundaries and service identities validated
+* Sensitive data flows protected and monitored
+* Least privilege enforced for IAM, tokens, and CI/CD
+* Secrets scoped, rotated, and logged
+* Logging and monitoring implemented and verified
+* Blast radius evaluated for all failure modes
+* Findings documented and tracked in enterprise workflow
 
 ---
 
-## Ethics & Authorization
+### 12. Checklist Summary Table
+
+| Checklist Section	                | Control Pattern(s)	  | Validation Method                        | Notes                                           |
+| ----------------------------------|-------------------------|------------------------------------------|-------------------------------------------      |
+| System Decomposition	            | 3,4,5	                  | Manual inventory, tools for coverage	 | Manual verification of ownership required       |
+| Trust Boundaries	                | 1,2,8	                  | Manual tests, Snyk, HackerOne	         | Network position ≠ trust                        |
+| Data Flow & Sensitive Data        | 4,8	                  | Log review, manual inspection	         | Encryption must be enforced                     |
+| AuthN/AuthZ	                    | 2,3,8	                  | Token testing, RBAC checks	             | Token scoping critical                          |
+| Service-to-Service	            | 1,2,3	                  | mTLS, token replay tests	             | Certificate rotation verification               |
+| CI/CD & Supply Chain	            | 3,4,6	                  | Pipeline inspection, env review	         | Manual verification mandatory                   |
+| Secrets Management	            | 4	                      | AWS Secrets Manager review	             | Detect global/shared secrets                    |
+| Logging & Detection	            | 5	                      | Log triggering, alert testing	         | Ensure coverage at trust boundaries             |   
+| Failure Modes & Blast Radius	    | All	                  | Manual scenario testing	                 | Lateral movement paths validated                |
+| Risk Prioritization & Reporting	| All	                  | Jira/ServiceNow, dashboards	             | Architecture risks tracked as first-class items | 
+
+---
+
+### Ethics & Authorization
 
 All checklist activities assume:
 

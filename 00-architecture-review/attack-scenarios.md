@@ -1,106 +1,132 @@
 # Architecture Review – Attack Scenarios
 
----
-
-## Real-World Architecture-Level Attack Scenarios
+> **Audience**: Senior / Staff / Principal Application Security Engineers
+> **Usage**: Threat modeling, live architecture reviews, red-team informed validation
+> **Scope**: FAANG / Fortune-50 scale, regulated and hyperscale environments
+> **Philosophy**: Assume breach. Architecture is guilty until proven resilient.
 
 Overview:
-This document captures realistic, high-impact attack scenarios that arise from architectural and trust design flaws, not missing patches or simple misconfigurations.
+This document captures real-world architecture abuse paths observed across large enterprises.
 
-Each scenario includes:
+These are not one-off bugs. They are:
 
-* Attacker goal and preconditions
-* Architectural weakness
-* Manual exploitation techniques with command examples
-* How enterprise security tools detect (or miss) the issue
-* How Senior Application Security Engineers validate, document, and automate response
+* Systemic trust failures
+* Identity boundary collapses
+* Tenant isolation breakdowns
+* CI/CD privilege escalations
+* Secrets blast-radius amplifiers
+* Detection blind spots
 
-These scenarios are derived from real enterprise breaches, bug bounty trends, and incident response investigations.
+**Each scenario includes**:
 
-All scenarios assume explicit authorization and defensive security intent.
+* Attacker objective
+* Architectural root cause
+* Real-world failure pattern
+* Manual exploitation validation
+* Enterprise tooling signal (and blind spots)
+* Python/API automation patterns
+* Architectural remediation direction
 
----
-
-## Scenario 1 – Over-Trusted Internal Microservices
-
-### Attacker Goal
-
-Gain administrative access by abusing implicit trust between internal services.
-
-### Architectural Weakness
-
-* Internal services trust network location
-* Missing service-to-service authorization
-* No identity validation between microservices
-
-### Real-World Pattern
-
-Attackers compromise a low-privilege service, pivot internally, and access admin APIs with no auth enforcement.
-
-### Manual Exploitation Techniques
-
-'''bash'''
-Direct access to internal admin endpoint:
-curl http://internal-user-service:8080/admin/users
-
-Replay a stolen service token:
-curl -H "Authorization: Bearer <service_token>" \
-http://internal-admin-api:8080/config
-
-### Tooling Perspective
-
-* Rapid7: May identify exposed internal services, not trust logic
-* CrowdStrike: Often blind to legitimate-looking internal API calls
-* Snyk: Can flag missing auth middleware in code
-
-### AppSec Validation Steps
-
-* Enumerate all internal APIs
-* Test unauthenticated and cross-service access
-* Require explicit service identity and authorization
-
-### Automation Example (Python)
-
-'''python'''
-
-services = ["user", "billing", "admin"]
-for s in services:
-    r = requests.get(f"http://internal-{s}:8080/admin")
-    if r.status_code == 200:
-        print(f"[!] Unprotected admin endpoint: {s}")
+**All testing assumes explicit authorization.**
 
 ---
 
-## Scenario 2 – Token Reuse Across Trust Boundaries
+### 1. Over-Trusted Internal Microservices
 
-### Attacker Goal
+**Attacker Objective:**
+Pivot from one compromised workload to sensitive internal services.
 
-Escalate privileges using a valid but mis-scoped token.
+**Architectural Root Cause:**
 
-### Architectural Weakness
+* Implicit trust based on network location
+* No service-to-service authentication
+* Flat cluster or VPC trust model
+* Missing authorization on internal admin APIs
 
-* Same JWT reused across services
-* Missing audience (`aud`) validation
-* No service-specific authorization
+**Real-World Failure Pattern:**
 
-### Manual Exploitation
+* “Internal-only” admin endpoints accessible without authentication
+* Any pod can call billing/admin/config APIs
+* Compromised sidecar → full environment pivot
 
+**Manual Validation:**
+# Enumerate internal services (Kubernetes)
 ```bash
-curl -H "Authorization: Bearer <user_token>" \
-https://api.company.com/internal/admin
+kubectl get svc -A
 ```
 
-### Tooling Perspective
+# Attempt direct access
+```bash
+curl http://internal-admin:8080/config
+```
 
-* **HackerOne**: Repeated IDOR/auth bypass reports signal design failure
-* **Snyk**: May flag missing token validation logic
+**Expected secure behavior: mTLS failure or 401/403.**
 
-### AppSec Insight
+## Enterprise Tooling Signal
 
-Multiple auth bugs usually indicate **one broken trust model**.
+| Tool	            | What It Detects	             | What It Misses                        |
+|-------------------|--------------------------------|---------------------------------------|
+| Rapid7	        | Open internal ports	         | Trust model logic                     |
+| CrowdStrike	    | Lateral movement anomalies	 | Legitimate-looking internal API abuse |
+| Snyk	            | Missing auth middleware	     | Runtime network trust collapse        |
 
-### Automation Example
+**Automation Pattern:**
+```python
+import requests
 
+def detect_unauth_internal(endpoints):
+    for e in endpoints:
+        try:
+            r = requests.get(e, timeout=3)
+            if r.status_code == 200:
+                print(f"[!] Over-trusted service: {e}")
+        except:
+            pass
+```
+
+**Architectural Fix:**
+
+- Enforce mTLS with workload identity (SPIFFE / IRSA / Workload Identity)
+- Service-level authorization (RBAC/ABAC)
+- Zero-trust east-west enforcement
+
+---
+
+### 2. Token Reuse & Audience Confusion
+
+**Attacker Objective**
+Reuse a valid token across services or privilege boundaries.
+
+**Architectural Root Cause:**
+
+* aud claim not validated
+* Shared JWT middleware across services
+* Authorization logic delegated to client
+* Long-lived tokens
+
+**Real-World Failure Pattern:**
+
+* User token accesses internal admin API
+* One service token valid across all APIs
+* Repeated IDOR findings across services
+
+**Manual Validation:**
+```bash
+curl -H "Authorization: Bearer <user_token>" \
+  https://api.company.com/internal/admin
+```
+
+**Expected secure behavior: 403 Forbidden.**
+
+## Enterprise Tooling Signal
+
+| Tool	                  | Signal                              |
+|-------------------------|-------------------------------------|
+| HackerOne	              | Repeated IDOR/auth bypass reports   |
+| Snyk	                  | Missing audience validation         |
+| Power BI	              | Trend: recurring auth class issues  |
+
+**Automation Pattern:**
 ```python
 def test_token_reuse(token, endpoints):
     for ep in endpoints:
@@ -109,183 +135,275 @@ def test_token_reuse(token, endpoints):
             print(f"[!] Token reuse possible: {ep}")
 ```
 
+**Architectural Fix**
+
+* Enforce strict audience validation
+* Service-specific tokens
+* Short TTL (minutes, not hours)
+* Centralized authorization middleware
+
 ---
 
-## Scenario 3 – Broken Tenant Isolation (Multi-Tenant Systems)
+### 3. Broken Tenant Isolation (Multi-Tenant Systems)
 
-### Attacker Goal
+**Attacker Objective**
 
-Access another tenant’s data.
+* Access another tenant’s data.
 
-### Architectural Weakness
+**Architectural Root Cause:**
 
 * Tenant ID supplied by client
-* Backend trusts client-controlled identifiers
-* No server-side tenant enforcement
+* Backend trusts user-supplied tenant context
+* No server-derived tenant binding
 
-### Manual Exploitation
+**Real-World Failure Pattern:**
 
+* /tenant/{id}/data directly accessible cross-tenant
+* Tenant switching via parameter manipulation
+
+**Manual Validation**
 ```bash
 curl -H "Authorization: Bearer <tenantA_token>" \
-https://api.company.com/tenant/tenantB/data
+  https://api.company.com/tenant/tenantB/data
 ```
 
-### Tooling Perspective
+**Enterprise Tooling Signal**
 
-* **HackerOne**: High-volume IDOR findings
-* **Power BI**: Tracks tenant isolation failures across apps
+| Tool	             | Signal                                    |
+|--------------------|-------------------------------------------|
+| HackerOne	         | High-volume IDOR findings                 |
+| Power BI	         | Tenant isolation trends                   |
+| Rapid7	         | Cannot detect logic-level isolation flaws |
 
-### AppSec Validation
+**Automation Pattern:**
+```python
+def test_cross_tenant(token, tenant_ids):
+    for t in tenant_ids:
+        r = requests.get(
+            f"https://api.company.com/tenant/{t}/data",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        if r.status_code == 200:
+            print(f"[!] Cross-tenant access detected: {t}")
+```
 
-* Ensure tenant context derived server-side
-* Test cross-tenant access across all APIs
+**Architectural Fix**
+
+* Derive tenant context server-side
+* Enforce tenant binding in shared middleware
+* Mandatory tenant assertion validation
 
 ---
 
-## Scenario 4 – CI/CD Pipeline as a Privilege Escalation Vector
+## 4. CI/CD Pipeline Privilege Escalation
 
-### Attacker Goal
+**Attacker Objective**
 
-Use CI/CD access to compromise production.
+* Use CI access to deploy malicious artifacts or access production.
 
-### Architectural Weakness
+**Architectural Root Cause**
 
-* CI runners hold production credentials
-* Secrets reused across environments
-* No approval or segregation gates
+* CI runners hold persistent cloud credentials
+* No separation between build and deploy identities
+* Secrets injected as environment variables
+* No artifact signing
 
-### Manual Techniques
+**Real-World Failure Pattern**
 
+* Leaked CI credentials → production takeover
+* Malicious artifact deployed without review
+
+**Manual Validation:**
+# From CI runner:
 ```bash
-# Dump environment variables from CI job
 env | grep AWS
 ```
 
-### Tooling Perspective
+**Expected secure state: ephemeral credentials only.**
 
-* **CrowdStrike**: Limited visibility into CI/CD runtimes
-* **Snyk**: Detects pipeline misconfigurations and secrets
+## Enterprise Tooling Signal
 
-### AppSec Validation
+| Tool	             | Signal                              |
+|--------------------|-------------------------------------|
+| Snyk	             | Pipeline misconfigurations          |
+| CrowdStrike	     | Limited CI runtime visibility       |
+| Rapid7	         | Cloud IAM over-permission detection |
 
-* Review pipeline permissions
-* Enforce build vs deploy separation
-
----
-
-## Scenario 5 – Centralized Secrets with Excessive Access
-
-### Attacker Goal
-
-Extract secrets to access multiple systems.
-
-### Architectural Weakness
-
-* Global secrets store
-* Broad access policies
-* No per-service scoping
-
-### Manual Exploitation
-
-```bash
-aws secretsmanager get-secret-value \
---secret-id prod/global
-```
-
-### Tooling Perspective
-
-* **Rapid7**: Detects cloud misconfigurations
-* **CrowdStrike**: Detects abuse only if anomalous
-
-### Automation Example
-
+**Automation Pattern:**
 ```python
-def find_overexposed_secrets(policies):
-    return [p for p in policies if p.get("scope") == "*"]
+def detect_ci_secrets(env_vars):
+    return [k for k in env_vars if k.startswith("AWS_")]
 ```
+
+**Architectural Fix:**
+
+* Ephemeral OIDC-based credentials
+* Separate build vs deploy roles
+* Mandatory approval gates
+* Signed artifact enforcement
 
 ---
 
-## Scenario 6 – Logging & Detection Blind Spots
+### 5. Secrets Sprawl & Global Credential Abuse
 
-### Attacker Goal
+**Attacker Objective**
 
-Operate without detection.
+* Leverage one secret to access multiple systems.
 
-### Architectural Weakness
+**Architectural Root Cause**
 
-* Missing logs at trust boundaries
-* No alerts for auth failures
-* Logs not centrally aggregated
+* Shared “global” secrets
+* Broad access IAM policies
+* Long-lived credentials
 
-### Manual Validation
+**Manual Validation**
+```bash
+aws secretsmanager list-secrets
+aws secretsmanager get-secret-value --secret-id prod/global
+```
 
+**Enterprise Tooling Signal**
+
+| Tool	         | Signal                     |
+|----------------|----------------------------|
+| Rapid7	     | Cloud IAM mapping          |
+| CrowdStrike	 | Anomalous access only      |
+| Snyk	         | Hardcoded secret detection |
+
+**Automation Pattern**
+```python
+def find_global_secrets(secrets):
+    return [s for s in secrets if s.get("scope") == "global"]
+```
+
+**Architectural Fix:**
+
+* Per-service secrets
+* Short TTL
+* Strict IAM boundaries
+* Mandatory rotation
+
+---
+
+### 6. Logging & Detection Blind Spots
+
+**Attacker Objective**
+
+* Operate undetected after compromise.
+* Architectural Root Cause
+* No logs at trust boundaries
+* Auth failures not alerted
+* No centralized SIEM ingestion
+
+**Manual Validation**
 ```bash
 curl -H "Authorization: Bearer invalid" \
-https://api.company.com/admin
+  https://api.company.com/admin
 ```
 
-### Tooling Perspective
+**Expected secure behavior: logged + alert triggered.**
 
-* **CrowdStrike**: Endpoint-focused, misses API abuse
-* **Power BI**: Highlights missing telemetry zones
+## Enterprise Tooling Signal
+
+| Tool	               | Signal                                  |
+|----------------------|-----------------------------------------|
+| CrowdStrike	       | Endpoint events only                    |
+| Power BI	           | Telemetry coverage gaps                 |
+| Rapid7	           | Infrastructure events, not logic events |
+
+**Automation Pattern**
+```python
+def verify_security_logging(event):
+    if not event.get("logged"):
+        print("[!] Detection blind spot")
+```
+
+**Architectural Fix**
+
+* Mandatory auth logging
+* Alerting on privilege escalation
+* Centralized log aggregation
+* Detection-as-code validation
 
 ---
 
-## Scenario 7 – Bug Bounty Signal → Architecture Failure
+### 7. Bug Bounty Signal → Architecture Failure
 
-### Attacker Goal
+**Attacker Objective**
 
-Exploit the same flaw across many endpoints.
+* Exploit the same design flaw across dozens of endpoints.
 
-### Architectural Weakness
+**Architectural Root Cause**
 
-* Shared insecure design pattern
-* No systemic remediation
+* Insecure shared pattern
+* One-off fixes instead of systemic remediation
+* No root cause aggregation
 
-### AppSec Response Pattern
+**Enterprise Pattern:**
 
-* Aggregate HackerOne reports
-* Identify shared root cause
-* Fix once, not 50 times
+* Repeated HackerOne IDOR reports across different services = one broken authorization model.
 
-### Automation Example
-
+## Automation Pattern
 ```python
 def group_by_root_cause(reports):
-    causes = {}
+    grouped = {}
     for r in reports:
-        causes.setdefault(r["pattern"], []).append(r)
-    return causes
+        grouped.setdefault(r["pattern"], []).append(r)
+    return grouped
 ```
 
+**Architectural Fix**
+
+* Identify shared library/design flaw
+* Fix once at platform layer
+* Mandate adoption via secure framework
+
+**Vulnerability Classes as Symptoms (Mapping Layer)**
+
+These repeat because of the architectural failures above:
+
+| Vulnerability Class	         | Architectural Failure          |
+|--------------------------------|--------------------------------|
+| IDOR	                         | Broken tenant isolation        |
+| Privilege escalation	         | Token audience confusion       |
+| Secret leakage	             | Secrets sprawl                 | 
+| Lateral movement	             | Over-trusted internal services |
+| CI compromise	                 | Pipeline identity collapse     |
+
 ---
 
-## Reporting & Workflow Integration
+## Enterprise Workflow Integration
 
-### Jira / ServiceNow
+Detection → Triage → Root Cause → Platform Fix
 
-* Architecture risks logged as design issues
-* Linked to multiple vulnerabilities
-* Assigned to platform teams
+**Detection Sources**
 
-### Power BI
+* Snyk (code & pipeline)
+* Rapid7 (infrastructure & IAM)
+* HackerOne (external signal)
+* CrowdStrike (endpoint telemetry)
 
-Track:
+**Tracking:**
+
+* Jira / ServiceNow as architecture issues (not isolated bugs)
+
+**Reporting**
+
+Power BI dashboards track:
 
 * Recurring architecture flaws
-* Time-to-remediate systemic issues
-* Vulnerability reduction after fixes
+* Mean time to systemic remediation
+* Vulnerability class reduction after design fixes
 
 ---
 
-## Key Takeaways for Senior AppSec Engineers
+## Senior AppSec Engineer Principles
 
-* Architecture flaws amplify attacker impact
-* Tools detect symptoms, not root causes
-* Manual testing exposes trust failures
-* Automation scales insight, not judgment
-* Fixing design issues reduces future vuln volume
+* Architecture flaws create vulnerability classes
+* Tools provide signals, not answers
+* Manual validation exposes trust assumptions
+* Automation scales verification, not judgment
+* Fixing design issues reduces future vulnerability volume exponentially
 
 ---
 
@@ -293,6 +411,6 @@ Track:
 
 All scenarios assume:
 
-* Explicit authorization
+* Explicit written authorization
 * Defensive security intent
 * Compliance with organizational policy

@@ -1,243 +1,496 @@
 # Asset Inventory – Testing Methodology
 
-## Overview:
+## Enterprise Application Security Validation Framework (FAANG / Fortune-50 Scale)
 
-This methodology describes a manual-first, security-driven approach to building and validating an enterprise asset inventory.
-
-The goal is not just to list assets, but to understand exposure, ownership, trust boundaries, and business criticality, enabling effective vulnerability management and risk prioritization.
-
-All activities assume authorized assessment environments only.
-
----
-
-## Guiding Principles
-
-- Inventory is continuous, not one-time
-- Exposure matters more than raw asset count
-- Unknown assets are the highest risk
-- Asset context (owner, data, trust level) is as important as existence
-- Automation supports — but does not replace — manual validation
+> **Audience:** Senior / Staff / Principal Application Security Engineers
+> **Usage:** Asset validation, onboarding gates, architecture reviews, governance enforcement
+> **Scope:** Multi-cloud (AWS, GCP, Azure), Kubernetes, hybrid, serverless, CI/CD, regulated enterprise environments
+> **Philosophy:** Inventory is only trustworthy if independently verified and continuously enforced.
 
 ---
 
-## Step 1: Define Inventory Scope
+# 1. Strategic Objective
 
-Before enumeration begins, define what is in scope:
+This methodology defines how to validate:
 
-- Applications (web, mobile, internal)
-- APIs (public, private, partner)
-- Backend services and microservices
-- Databases and data stores
-- Cloud resources (compute, storage, IAM)
-- CI/CD infrastructure
-- Third-party integrations
+* Completeness of asset inventory
+* Ownership accountability
+* Internet exposure accuracy
+* IAM-to-workload mapping
+* Data classification integrity
+* Drift detection capability
+* Governance enforcement
 
-Deliverable:
-- Clear scope definition to avoid blind spots and noise
+At FAANG / Fortune-50 scale, asset inventory is not documentation —
+it is a **foundational security control**.
 
----
+Inventory is valid only when:
 
-## Step 2: Domain & DNS Enumeration
+* 100% of production assets are registered
+* 100% of internet-facing assets are documented
+* 100% IAM roles map to workloads
+* Zero ownerless production assets exist
+* Drift detection is automated and operational
+* Governance enforcement blocks non-compliant deployments
 
-Identify all domains and subdomains associated with the organization.
-
-### Validation Commands
-
-dig target.com any
-nslookup target.com
-host target.com
-
-What this validates:
-
-- Public-facing assets
-- Legacy or forgotten subdomains
-- Mail, auth, and infrastructure records
-
-Deliverable:
-
-- Initial domain and subdomain list
+Testing must be performed only in authorized environments.
 
 ---
 
-### Step 3: Host Availability & Exposure
+# 2. Hyperscale Enterprise Reality
 
-- Determine which identified hosts are live and reachable.
+Large enterprises commonly operate:
 
-## Validation Commands:
+* 100+ cloud accounts per provider
+* 10k–100k compute workloads
+* 1k+ repositories
+* Multi-cloud environments
+* Hybrid Kubernetes + VM + serverless deployments
+* Multiple identity systems
+* Federated business units
+* Acquisitions with legacy infrastructure
 
+Inventory must unify:
+
+* Domains & DNS
+* Public APIs
+* Cloud compute
+* IAM roles
+* Kubernetes workloads
+* CI/CD pipelines
+* Repositories
+* Data stores
+* Third-party integrations
+* SaaS systems
+
+If enumeration takes more than 60 seconds, control is already degraded.
+
+---
+
+# 3. Core Testing Principles
+
+1. Assume the inventory is incomplete.
+2. Independently enumerate infrastructure.
+3. Cross-reference multiple sources of truth.
+4. Validate ownership accountability.
+5. Confirm exposure assumptions.
+6. Test governance enforcement.
+7. Simulate drift.
+8. Verify detection.
+
+Inventory without validation is optimism.
+Inventory with enforcement is enterprise control.
+
+---
+
+# 4. Validation Phases
+
+---
+
+# Phase 1 – Cloud Control Plane Reconciliation
+
+## Goal
+
+Ensure all cloud resources are present in central inventory.
+
+## AWS Manual Enumeration
+
+```bash
+aws ec2 describe-instances --query 'Reservations[*].Instances[*].InstanceId' --output text
+aws elbv2 describe-load-balancers
+aws iam list-roles
+aws lambda list-functions
+aws s3api list-buckets
+aws rds describe-db-instances
+```
+
+### Validation Questions
+
+* Are all production resources present in inventory?
+* Are buckets classified and owned?
+* Do IAM roles map to known services?
+* Are load balancers tagged and exposure documented?
+
+Failure Condition:
+Any production resource missing from inventory.
+
+---
+
+## GCP Validation
+
+```bash
+gcloud compute instances list
+gcloud iam service-accounts list
+gcloud functions list
+```
+
+---
+
+## Azure Validation
+
+```bash
+az vm list
+az functionapp list
+az role assignment list
+```
+
+---
+
+# Phase 2 – Kubernetes Enumeration
+
+## Goal
+
+Identify undocumented services and exposure paths.
+
+```bash
+kubectl get svc -A
+kubectl get ingress -A
+kubectl get svc -A | grep NodePort
+kubectl describe svc <service-name>
+```
+
+### Validation Checks
+
+* Does each namespace map to environment?
+* Are external IPs documented?
+* Are ingress routes approved?
+* Does each service map to IAM identity?
+* Is owner documented?
+
+Common Failure:
+Internal admin service exposed via misconfigured ingress.
+
+---
+
+# Phase 3 – DNS & External Attack Surface Validation
+
+## Goal
+
+Detect shadow domains and forgotten infrastructure.
+
+```bash
+dig company.com
+nslookup company.com
+host company.com
+```
+
+Subdomain enumeration (authorized scope only):
+
+```bash
+amass enum -d company.com
+```
+
+Cross-reference findings with inventory.
+
+Failure Condition:
+Externally reachable domain not registered.
+
+---
+
+# Phase 4 – Host & Service Exposure Validation
+
+Validate live hosts:
+
+```bash
 ping target.com
 curl -I https://target.com
+```
 
-### What this validates:
+Validate exposed ports:
 
-- Reachability
-- Internet exposure
-- TLS usage
-
-### Deliverable:
-
-- List of live hosts
-- Identification of externally exposed assets
-
----
-
-### Step 4: Service & Port Identification
-
-- Validate which services are exposed and listening.
-
-#### Validation Commands:
-
+```bash
 nc -vz target.com 80
 nc -vz target.com 443
+```
 
-(Automated scanning tools may be used where authorized, but results must be manually reviewed.)
+Look for:
 
-#### What this validates:
-
-- Unexpected exposed services
-- Non-standard ports
-- Shadow infrastructure
-
-#### Deliverable:
-
-- Service and port inventory per host
+* Unexpected services
+* Non-standard ports
+* Forgotten infrastructure
+* Legacy hosts still reachable
 
 ---
 
-### Step 5: API & Application Interface Mapping
+# Phase 5 – API & Interface Mapping
 
-- Identify application and API entry points.
+Inventory application and API entry points.
 
-#### Validation Techniques:
-
-- Review API documentation (OpenAPI / Swagger)
-- Inspect browser DevTools
-- Analyze mobile or frontend traffic
-- Review CI/CD and deployment configs
-
-#### Example:
-
+```bash
 curl https://target.com/.well-known/openapi.json
+```
 
-#### What this validates:
+Validation Techniques:
 
-- API surface area
-- Hidden or undocumented endpoints
-- Entry points for authentication and authorization testing
-
-#### Deliverable:
-
-- API endpoint inventory
-- Application interface map
-
----
-
-### Step 6: Cloud & Infrastructure Asset Identification
-
-- Identify cloud-native assets and infrastructure components.
-
-#### Areas to Inventory:
-
-- Compute (VMs, containers, serverless)
-- Storage (databases, object storage)
-- Networking (VPCs, load balancers, gateways)
-- Identity (IAM roles, service accounts)
-
-#### Example (AWS):
-
-aws sts get-caller-identity
-
-#### What this validates:
-
-- Cloud footprint
-- Identity and permission scope
-- Shared or over-privileged resources
+* Inspect OpenAPI/Swagger
+* Browser DevTools traffic analysis
+* Mobile API inspection
+* Review deployment configs
+* Inspect CI/CD pipelines
 
 Deliverable:
-
-- Cloud asset inventory with ownership and purpose
-
----
-
-### Step 7: Dependency & Third-Party Mapping
-
-- Identify dependencies that introduce external risk.
-
-#### Includes:
-
-- Third-party APIs
-- SaaS integrations
-- Libraries and packages
-- Managed cloud services
-
-#### What this validates:
-
-- Supply chain exposure
-- Trust relationships
-- External blast radius
-
-#### Deliverable:
-
-- Dependency inventory with trust classification
-
-### Step 8: Asset Classification & Risk Context
-
-For each asset, capture context:
-
-- Business function
-- Data sensitivity
-- Exposure level (public, internal, restricted)
-- Authentication and authorization requirements
-- Asset owner or team
-
-This step transforms inventory into actionable risk data.
-
-#### Deliverable:
-
-- Risk-aware asset inventory
+API endpoint inventory mapped to owners and services.
 
 ---
 
-### Step 9: Documentation & Inventory Maintenance
+# Phase 6 – IAM Relationship Testing
 
-- Maintain findings in a structured format (CSV, spreadsheet, or CMDB).
+## Goal
 
-#### Example:
+Ensure identity-to-service mapping integrity.
 
-echo "Asset,Type,Exposure,Owner,Notes" > assets.csv
-echo "api.target.com,API,Public,Payments Team,Handles PII" >> assets.csv
+```bash
+aws iam list-roles
+aws iam get-role --role-name <role-name>
+```
 
-#### Best practices:
+Validate:
 
-- Version-controlled inventory
-- Regular review and updates
-- Integration with vulnerability management workflows
+* Trust policy correctness
+* Attached policies minimal
+* Role mapped to workload
+* Cross-account trust documented
+* Unused roles >90 days removed
 
-#### Outputs:
+Failure Conditions:
 
-A complete asset inventory produces:
-- Domains and subdomains
-- Live hosts and services
-- API and application entry points
-- Cloud and infrastructure assets
-- Third-party dependencies
-- Risk and exposure classification
-
-#### Why This Matters:
-
-- You cannot secure what you do not know exists.
-
-A mature asset inventory:
-- Reduces attack surface
-- Enables accurate vulnerability prioritization
-- Supports threat modeling and incident response
-- Prevents shadow IT and forgotten assets
-- Improves security reporting and leadership visibility
+* Role not mapped
+* Excessive privilege
+* Undocumented cross-account trust
 
 ---
 
-#### Notes:
+# Phase 7 – Security Tool Cross-Validation
 
-- Asset inventory is a living process
-- Re-run regularly and after major changes
-- All activities must be explicitly authorized
+Security tooling provides independent visibility and must reconcile with inventory.
+
+---
+
+## Rapid7 InsightVM
+
+Use to:
+
+* Export discovered assets
+* Identify externally reachable IPs
+* Detect rogue hosts
+
+Example API Pull:
+
+```python
+import requests
+
+url = "https://yourcompany.rapid7.com/api/3/assets"
+headers = {"X-Api-Key": "API_KEY"}
+
+response = requests.get(url, headers=headers)
+assets = response.json()["resources"]
+
+for asset in assets:
+    print(asset["ip"])
+```
+
+Failure:
+Scanned host not present in inventory.
+
+---
+
+## CrowdStrike
+
+Use to:
+
+* Identify active endpoints
+* Detect unmanaged workloads
+
+Validation:
+Compare active agent list to inventory dataset.
+
+Failure:
+Running workload without inventory registration.
+
+---
+
+## Snyk
+
+Use to:
+
+* Enumerate repositories
+* Identify container images
+* Map deployed services to source repos
+
+Failure:
+Deployed container not linked to repository.
+
+---
+
+## HackerOne
+
+Use to:
+
+* Identify repeated reports referencing unknown APIs
+* Detect shadow assets discovered by researchers
+
+Repeated “unknown asset” reports = inventory failure.
+
+---
+
+## Microsoft Power BI
+
+Use BI aggregation to:
+
+* Detect ownerless assets
+* Flag public exposure without documentation
+* Visualize IAM sprawl
+* Track reconciliation metrics
+
+Executive dashboards enforce accountability.
+
+---
+
+# Phase 8 – Ownership & Classification Validation
+
+Each asset must include:
+
+* Business owner
+* Engineering owner
+* Environment tag
+* Data classification
+* Exposure status
+* Criticality rating
+* IAM mapping
+
+## Practical Test
+
+Randomly select 10 production assets:
+
+* Contact listed owner
+* Confirm acknowledgment
+* Validate classification accuracy
+
+Owner unaware of asset = governance breakdown.
+
+---
+
+# Phase 9 – Automation-Based Reconciliation
+
+Manual validation does not scale at FAANG level.
+
+---
+
+## Example – Detect Untracked Cloud Assets
+
+```python
+import boto3
+
+ec2 = boto3.client("ec2")
+instances = ec2.describe_instances()
+
+cloud_ids = []
+for r in instances["Reservations"]:
+    for i in r["Instances"]:
+        cloud_ids.append(i["InstanceId"])
+
+inventory_ids = ["i-123", "i-456"]  # pulled from DB
+
+missing = set(cloud_ids) - set(inventory_ids)
+
+for m in missing:
+    print("Untracked asset:", m)
+```
+
+---
+
+## Example – Detect Ownerless Assets
+
+```python
+assets = [
+    {"asset_id": "api-prod", "owner": "payments"},
+    {"asset_id": "legacy-admin", "owner": None}
+]
+
+for asset in assets:
+    if not asset["owner"]:
+        print("Ownerless:", asset["asset_id"])
+```
+
+---
+
+# Phase 10 – Drift Detection Testing
+
+Simulate new asset deployment:
+
+1. Deploy test service
+2. Validate CI/CD registration hook fires
+3. Confirm automatic tagging
+4. Confirm inventory record created
+5. Delete resource
+6. Confirm removal detected
+
+Detection >24 hours at enterprise scale is unacceptable.
+
+---
+
+# Phase 11 – Governance Gate Testing
+
+Onboarding must fail if:
+
+* Asset not registered
+* Owner missing
+* IAM role unmapped
+* Public exposure undocumented
+* Data classification undefined
+
+Test enforcement in:
+
+* CI/CD pipelines
+* Infrastructure-as-Code workflows
+* Cloud provisioning automation
+* Change management process
+
+Governance without enforcement is advisory.
+
+---
+
+# 5. Red Flags During Testing
+
+* Production tagged as dev
+* Public load balancer without owner
+* IAM role unused but high privilege
+* Kubernetes service without ingress documentation
+* Container running without linked repository
+* Domain resolving to unknown infrastructure
+* Repeated bug bounty reports referencing unknown APIs
+
+---
+
+# 6. Exit Criteria (FAANG / Fortune-50 Maturity)
+
+Validation passes when:
+
+* 100% production assets registered
+* 100% internet-facing assets documented
+* 100% IAM roles mapped to workloads
+* Zero ownerless production assets
+* Automated reconciliation running daily
+* Drift detection operational
+* Governance gates enforced
+
+---
+
+# 7. Strategic Outcome
+
+A validated enterprise asset inventory:
+
+* Reduces unknown attack surface
+* Improves vulnerability signal accuracy
+* Accelerates incident containment
+* Prevents shadow infrastructure growth
+* Enables enforceable governance
+* Supports audit and regulatory requirements
+* Strengthens architecture review confidence
+
+You cannot secure what you cannot enumerate.
+You cannot govern what you cannot attribute.
+You cannot defend what you cannot detect drifting.
+
+**Asset inventory at FAANG / Fortune-50 scale is not a spreadsheet.**
+**It is a continuously tested security control.**
